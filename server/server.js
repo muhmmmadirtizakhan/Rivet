@@ -17,7 +17,13 @@ app.get('/', (req, res) => {
 
 app.use("/api/inngest", serve({ client: inngest, functions }));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`server is running on port ${PORT}`);
-});
+// ✅ VERCEL FIX - Remove app.listen, add export
+export default app;
+
+// ✅ For local development only
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+        console.log(`server is running on port ${PORT}`);
+    });
+}
