@@ -4,7 +4,8 @@ import { Inngest } from "inngest";
 export const inngest = new Inngest({ 
     id: "my-app",
     name: "Rivet App",
-    eventKey: process.env.INNGEST_EVENT_KEY  // Optional for now
+    eventKey: process.env.INNGEST_EVENT_KEY,
+    signingKey: process.env.INNGEST_SIGNING_KEY
 });
 
 // Add explicit logging at function creation time
