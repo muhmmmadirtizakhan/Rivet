@@ -1,45 +1,55 @@
 import { Inngest } from "inngest";
 
-export const inngest = new Inngest({ id: "my-app" });
+// Initialize with explicit app name
+export const inngest = new Inngest({ 
+    id: "my-app",
+    name: "Rivet App",
+    eventKey: process.env.INNGEST_EVENT_KEY  // Optional for now
+});
+
+// Add explicit logging at function creation time
+console.log("📝 Registering function: sync-user-from-clerk with trigger: user.created");
 
 const syncUserCreation = inngest.createFunction(
     { 
         id: 'sync-user-from-clerk',
-        trigger: { event: 'user.created' }  // ✅ Fixed: removed 'clerk/'
+        name: 'Sync User from Clerk',  // Add human readable name
+        trigger: { event: 'clerk/user.created' }
     },
     async ({ event }) => {
-        const { data } = event;
-        console.log("✅ User created event received!");
-        console.log("User ID:", data.id);
-        console.log("Email:", data.email_addresses?.[0]?.email_address);
-        console.log("Name:", data.first_name, data.last_name);
-        // TODO: Add database logic here when prisma is installed
+        console.log("🎯 FUNCTION TRIGGERED! User created:", event.data.id);
+        return { success: true, userId: event.data.id };
     }
 );
+
+console.log("📝 Registering function: delete-user-with-clerk");
 
 const syncUserDeletion = inngest.createFunction(
     { 
         id: 'delete-user-with-clerk',
-        trigger: { event: 'user.deleted' }  // ✅ Fixed: removed 'clerk/'
+        name: 'Delete User from Clerk',
+        trigger: { event: 'clerk/user.deleted' }
     },
     async ({ event }) => {
-        const { data } = event;
-        console.log("✅ User deleted event received!");
-        console.log("User ID:", data.id);
+        console.log("🎯 FUNCTION TRIGGERED! User deleted:", event.data.id);
+        return { success: true };
     }
 );
+
+console.log("📝 Registering function: update-user-with-clerk");
 
 const syncUserUpdation = inngest.createFunction(
     { 
         id: 'update-user-with-clerk',
-        trigger: { event: 'user.updated' }  // ✅ Fixed: removed 'clerk/'
+        name: 'Update User from Clerk',
+        trigger: { event: 'clerk/user.updated' }
     },
     async ({ event }) => {
-        const { data } = event;
-        console.log("✅ User updated event received!");
-        console.log("User ID:", data.id);
-        console.log("New Email:", data.email_addresses?.[0]?.email_address);
+        console.log("🎯 FUNCTION TRIGGERED! User updated:", event.data.id);
+        return { success: true };
     }
 );
 
 export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation];
+
+console.log(`✅ Total ${functions.length} functions registered successfully`);
