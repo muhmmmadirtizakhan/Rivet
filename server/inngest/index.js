@@ -50,6 +50,34 @@ const syncUserUpdation = inngest.createFunction(
     }
 );
 
-export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation];
+console.log("📝 Registering function: session-removed");
+
+const sessionRemoved = inngest.createFunction(
+    { 
+        id: 'session-removed',
+        name: 'Session Removed (Logout)',
+        trigger: { event: 'clerk/session.removed' }
+    },
+    async ({ event }) => {
+        console.log("🚪 SESSION REMOVED (LOGOUT):", event.data.id);
+        return { success: true };
+    }
+);
+
+console.log("📝 Registering function: session-created");
+
+const sessionCreated = inngest.createFunction(
+    { 
+        id: 'session-created',
+        name: 'Session Created (Login)',
+        trigger: { event: 'clerk/session.created' }
+    },
+    async ({ event }) => {
+        console.log("✅ SESSION CREATED (LOGIN):", event.data.id);
+        return { success: true };
+    }
+);
+
+export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation, sessionRemoved, sessionCreated];
 
 console.log(`✅ Total ${functions.length} functions registered successfully`);
