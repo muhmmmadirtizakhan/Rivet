@@ -14,8 +14,8 @@ console.log("📝 Registering function: sync-user-from-clerk with trigger: user.
 const syncUserCreation = inngest.createFunction(
     { 
         id: 'sync-user-from-clerk',
-        name: 'Sync User from Clerk',  // Add human readable name
-        trigger: { event: 'clerk/user.created' }
+        name: 'Sync User from Clerk',
+        triggers: [{ event: 'clerk/user.created' }]
     },
     async ({ event }) => {
         console.log("🎯 FUNCTION TRIGGERED! User created:", event.data.id);
@@ -29,7 +29,7 @@ const syncUserDeletion = inngest.createFunction(
     { 
         id: 'delete-user-with-clerk',
         name: 'Delete User from Clerk',
-        trigger: { event: 'clerk/user.deleted' }
+        triggers: [{ event: 'clerk/user.deleted' }]
     },
     async ({ event }) => {
         console.log("🎯 FUNCTION TRIGGERED! User deleted:", event.data.id);
@@ -43,7 +43,7 @@ const syncUserUpdation = inngest.createFunction(
     { 
         id: 'update-user-with-clerk',
         name: 'Update User from Clerk',
-        trigger: { event: 'clerk/user.updated' }
+        triggers: [{ event: 'clerk/user.updated' }]
     },
     async ({ event }) => {
         console.log("🎯 FUNCTION TRIGGERED! User updated:", event.data.id);
@@ -57,7 +57,7 @@ const sessionRemoved = inngest.createFunction(
     { 
         id: 'session-removed',
         name: 'Session Removed (Logout)',
-        trigger: { event: 'clerk/session.removed' }
+        triggers: [{ event: 'clerk/session.removed' }]
     },
     async ({ event }) => {
         console.log("🚪 SESSION REMOVED (LOGOUT):", event.data.id);
@@ -71,7 +71,7 @@ const sessionCreated = inngest.createFunction(
     { 
         id: 'session-created',
         name: 'Session Created (Login)',
-        trigger: { event: 'clerk/session.created' }
+        triggers: [{ event: 'clerk/session.created' }]
     },
     async ({ event }) => {
         console.log("✅ SESSION CREATED (LOGIN):", event.data.id);
