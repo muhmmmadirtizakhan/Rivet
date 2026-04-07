@@ -2,16 +2,37 @@ import { Inngest } from "inngest";
 import prisma from "../configs/prisma.js";
 
 const formatClerkUser = (data) => {
-    const email = data?.email_addresses?.[0]?.email_address || data?.email || data?.primary_email_address || `${data?.id || 'unknown'}@clerk.local`;
-    const name = data?.full_name || [data?.first_name, data?.last_name].filter(Boolean).join(" ") || email || data?.id || "Unknown User";
-    const image = data?.profile_image_url || data?.image_url || "";
+    const raw = data?.user || data?.session || data?.actor || data;
+    const id = raw?.id || raw?.user_id || raw?.userId || raw?.user?.id;
+    const email = raw?.email_addresses?.[0]?.email_address || raw?.email || raw?.primary_email_address || raw?.email_address || `${id || 'unknown'}@clerk.local`;
+    const name = raw?.full_name || raw?.name || [raw?.first_name, raw?.last_name].filter(Boolean).join(" ") || email || id || "Unknown User";
+    const image = raw?.profile_image_url || raw?.image_url || raw?.image || "";
 
     return {
-        id: data?.id,
+        id,
         email,
         name,
         image
     };
+};
+
+const upsertClerkUser = async (data) => {
+    const user = formatClerkUser(data || {});
+
+    if (!user.id) {
+        console.warn("⚠️ Clerk user payload missing id, skipping Neon upsert", data);
+        return null;
+    }
+
+    return prisma.user.upsert({
+        where: { id: user.id },
+        update: {
+            name: user.name,
+            email: user.email,
+            image: user.image
+        },
+        create: user
+    });
 };
 
 // Initialize with explicit app name
@@ -23,7 +44,7 @@ export const inngest = new Inngest({
 });
 
 // Add explicit logging at function creation time
--console.log("📝 Registering function: sync-user-from-clerk with trigger: clerk/user.created");
+console.log("📝 Registering function: sync-user-from-clerk with trigger: clerk/user.created");
 
 const syncUserCreation = inngest.createFunction(
     {
@@ -32,19 +53,13 @@ const syncUserCreation = inngest.createFunction(
         triggers: [{ event: 'clerk/user.created' }]
     },
     async ({ event }) => {
-        console.log("🎯 FUNCTION TRIGGERED! User created:", event.data?.id);
-        const user = formatClerkUser(event.data || {});
+        console.log("🎯 FUNCTION TRIGGERED! User created:", event.data?.id || event.data?.user_id || event.data?.user?.id);
 
         try {
-            const createdUser = await prisma.user.upsert({
-                where: { id: user.id },
-                update: {
-                    name: user.name,
-                    email: user.email,
-                    image: user.image
-                },
-                create: user
-            });
+            const createdUser = await upsertClerkUser(event.data);
+            if (!createdUser) {
+                return { success: false, error: 'missing user id' };
+            }
             console.log("✅ User synced to Neon:", createdUser.id);
             return { success: true, userId: createdUser.id };
         } catch (error) {
@@ -63,14 +78,15 @@ const syncUserDeletion = inngest.createFunction(
         triggers: [{ event: 'clerk/user.deleted' }]
     },
     async ({ event }) => {
-        console.log("🎯 FUNCTION TRIGGERED! User deleted:", event.data?.id);
+        const id = event.data?.id || event.data?.user_id || event.data?.user?.id || event.data?.session?.user_id;
+        console.log("🎯 FUNCTION TRIGGERED! User deleted:", id);
 
         try {
-            await prisma.user.delete({ where: { id: event.data?.id } });
-            console.log("✅ User deleted from Neon:", event.data?.id);
+            await prisma.user.delete({ where: { id } });
+            console.log("✅ User deleted from Neon:", id);
             return { success: true };
         } catch (error) {
-            console.warn("⚠️ User delete failed or user not found:", event.data?.id, error?.message || error);
+            console.warn("⚠️ User delete failed or user not found:", id, error?.message || error);
             return { success: false, error: error?.message || "delete failed" };
         }
     }
@@ -85,19 +101,13 @@ const syncUserUpdation = inngest.createFunction(
         triggers: [{ event: 'clerk/user.updated' }]
     },
     async ({ event }) => {
-        console.log("🎯 FUNCTION TRIGGERED! User updated:", event.data?.id);
-        const user = formatClerkUser(event.data || {});
+        console.log("🎯 FUNCTION TRIGGERED! User updated:", event.data?.id || event.data?.user_id || event.data?.user?.id);
 
         try {
-            const updatedUser = await prisma.user.upsert({
-                where: { id: user.id },
-                update: {
-                    name: user.name,
-                    email: user.email,
-                    image: user.image
-                },
-                create: user
-            });
+            const updatedUser = await upsertClerkUser(event.data);
+            if (!updatedUser) {
+                return { success: false, error: 'missing user id' };
+            }
             console.log("✅ User updated in Neon:", updatedUser.id);
             return { success: true, userId: updatedUser.id };
         } catch (error) {
@@ -130,8 +140,20 @@ const sessionCreated = inngest.createFunction(
         triggers: [{ event: 'clerk/session.created' }]
     },
     async ({ event }) => {
-        console.log("✅ SESSION CREATED (LOGIN):", event.data.id);
-        return { success: true };
+        console.log("✅ SESSION CREATED (LOGIN):", event.data?.id || event.data?.session?.id || event.data?.user_id);
+
+        try {
+            const createdUser = await upsertClerkUser(event.data);
+            if (createdUser) {
+                console.log("✅ Session login user synced to Neon:", createdUser.id);
+                return { success: true, userId: createdUser.id };
+            }
+            console.warn("⚠️ Session login event contained no user id, skipping Neon upsert", event.data);
+            return { success: true, warning: 'no user id in session event' };
+        } catch (error) {
+            console.error("❌ Failed to sync session login user to Neon:", error);
+            throw error;
+        }
     }
 );
 
