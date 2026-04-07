@@ -1,9 +1,13 @@
 import { Inngest } from "inngest";
 import prisma from "../configs/prisma.js";
 
+const getClerkUserId = (data) => {
+    return data?.id || data?.user_id || data?.user?.id || data?.session?.user_id || data?.session?.user?.id || data?.session?.id;
+};
+
 const formatClerkUser = (data) => {
     const raw = data?.user || data?.session || data?.actor || data;
-    const id = raw?.id || raw?.user_id || raw?.userId || raw?.user?.id;
+    const id = getClerkUserId(data) || raw?.id || raw?.user_id || raw?.user?.id;
     const email = raw?.email_addresses?.[0]?.email_address || raw?.email || raw?.primary_email_address || raw?.email_address || `${id || 'unknown'}@clerk.local`;
     const name = raw?.full_name || raw?.name || [raw?.first_name, raw?.last_name].filter(Boolean).join(" ") || email || id || "Unknown User";
     const image = raw?.profile_image_url || raw?.image_url || raw?.image || "";
@@ -14,6 +18,17 @@ const formatClerkUser = (data) => {
         name,
         image
     };
+};
+
+const logClerkEvent = (event, tag) => {
+    const id = getClerkUserId(event.data);
+    const payload = {
+        id,
+        user_id: event.data?.user_id,
+        session_user_id: event.data?.session?.user_id,
+        eventDataKeys: Object.keys(event.data || {})
+    };
+    console.log(`📥 ${tag} event=${event.name}`, payload);
 };
 
 const upsertClerkUser = async (data) => {
@@ -53,7 +68,7 @@ const syncUserCreation = inngest.createFunction(
         triggers: [{ event: 'clerk/user.created' }]
     },
     async ({ event }) => {
-        console.log("🎯 FUNCTION TRIGGERED! User created:", event.data?.id || event.data?.user_id || event.data?.user?.id);
+        logClerkEvent(event, 'User created');
 
         try {
             const createdUser = await upsertClerkUser(event.data);
@@ -64,7 +79,7 @@ const syncUserCreation = inngest.createFunction(
             return { success: true, userId: createdUser.id };
         } catch (error) {
             console.error("❌ Failed to sync user to Neon:", error);
-            throw error;
+            return { success: false, error: error?.message || error };
         }
     }
 );
@@ -78,8 +93,8 @@ const syncUserDeletion = inngest.createFunction(
         triggers: [{ event: 'clerk/user.deleted' }]
     },
     async ({ event }) => {
-        const id = event.data?.id || event.data?.user_id || event.data?.user?.id || event.data?.session?.user_id;
-        console.log("🎯 FUNCTION TRIGGERED! User deleted:", id);
+        logClerkEvent(event, 'User deleted');
+        const id = getClerkUserId(event.data);
 
         try {
             await prisma.user.delete({ where: { id } });
@@ -101,7 +116,7 @@ const syncUserUpdation = inngest.createFunction(
         triggers: [{ event: 'clerk/user.updated' }]
     },
     async ({ event }) => {
-        console.log("🎯 FUNCTION TRIGGERED! User updated:", event.data?.id || event.data?.user_id || event.data?.user?.id);
+        logClerkEvent(event, 'User updated');
 
         try {
             const updatedUser = await upsertClerkUser(event.data);
@@ -112,7 +127,7 @@ const syncUserUpdation = inngest.createFunction(
             return { success: true, userId: updatedUser.id };
         } catch (error) {
             console.error("❌ Failed to update user in Neon:", error);
-            throw error;
+            return { success: false, error: error?.message || error };
         }
     }
 );
@@ -140,7 +155,7 @@ const sessionCreated = inngest.createFunction(
         triggers: [{ event: 'clerk/session.created' }]
     },
     async ({ event }) => {
-        console.log("✅ SESSION CREATED (LOGIN):", event.data?.id || event.data?.session?.id || event.data?.user_id);
+        logClerkEvent(event, 'Session created');
 
         try {
             const createdUser = await upsertClerkUser(event.data);
@@ -152,7 +167,7 @@ const sessionCreated = inngest.createFunction(
             return { success: true, warning: 'no user id in session event' };
         } catch (error) {
             console.error("❌ Failed to sync session login user to Neon:", error);
-            throw error;
+            return { success: false, error: error?.message || error };
         }
     }
 );
