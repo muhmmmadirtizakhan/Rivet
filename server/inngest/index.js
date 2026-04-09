@@ -171,7 +171,149 @@ const sessionCreated = inngest.createFunction(
         }
     }
 );
+// Inngest function to save workspace data from Clerk organizations
+const syncWorkspaceCreation = inngest.createFunction(
+    {
+        id: 'sync-workspace-from-clerk',
+        name: 'Sync Workspace from Clerk',
+        triggers: [{ event: 'clerk/organization.created' }]
+    },
+    async ({ event }) => {
+        const { data } = event;
 
-export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation, sessionRemoved, sessionCreated];
+        if (!data?.id) {
+            console.warn('⚠️ Organization event missing id, skipping workspace upsert', data);
+            return { success: false, error: 'missing organization id' };
+        }
+
+        try {
+            await prisma.workspace.create({
+                data: {
+                    id: data.id,
+                    name: data.name,
+                    slug: data.slug,
+                    ownerId: data.created_by,
+                    image_url: data.image_url,
+                }
+            });
+
+            await prisma.workspaceMember.create({
+                data: {
+                    userId: data.created_by,
+                    workspaceId: data.id,
+                    role: 'Admin',
+                }
+            });
+
+            console.log('✅ Workspace synced to Neon:', data.id);
+            return { success: true, workspaceId: data.id };
+        } catch (error) {
+            console.error('❌ Failed to sync workspace to Neon:', error);
+            return { success: false, error: error?.message || error };
+        }
+    }
+);
+
+const syncWorkspaceUpdation = inngest.createFunction(
+    {
+        id: 'update-workspace-from-clerk',
+        name: 'Update Workspace from Clerk',
+        triggers: [{ event: 'clerk/organization.updated' }]
+    },
+    async ({ event }) => {
+        const { data } = event;
+
+        if (!data?.id) {
+            console.warn('⚠️ Organization update event missing id, skipping workspace update', data);
+            return { success: false, error: 'missing organization id' };
+        }
+
+        try {
+            await prisma.workspace.update({
+                where: { id: data.id },
+                data: {
+                    name: data.name,
+                    slug: data.slug,
+                    image_url: data.image_url,
+                }
+            });
+
+            console.log('✅ Workspace updated in Neon:', data.id);
+            return { success: true, workspaceId: data.id };
+        } catch (error) {
+            console.error('❌ Failed to update workspace in Neon:', error);
+            return { success: false, error: error?.message || error };
+        }
+    }
+);
+
+const syncWorkspaceDeletion = inngest.createFunction(
+    {
+        id: 'delete-workspace-from-clerk',
+        name: 'Delete Workspace from Clerk',
+        triggers: [{ event: 'clerk/organization.deleted' }]
+    },
+    async ({ event }) => {
+        const { data } = event;
+
+        if (!data?.id) {
+            console.warn('⚠️ Organization delete event missing id, skipping workspace delete', data);
+            return { success: false, error: 'missing organization id' };
+        }
+
+        try {
+            await prisma.workspace.delete({ where: { id: data.id } });
+            console.log('✅ Workspace deleted from Neon:', data.id);
+            return { success: true, workspaceId: data.id };
+        } catch (error) {
+            console.error('❌ Failed to delete workspace from Neon:', error);
+            return { success: false, error: error?.message || error };
+        }
+    }
+);
+
+const syncWorkspaceMemberCreation = inngest.createFunction(
+    {
+        id: 'sync-workspace-member-from-clerk',
+        name: 'Sync Workspace Member from Clerk',
+        triggers: [{ event: 'clerk/organization.membership.created' }]
+    },
+    async ({ event }) => {
+        const { data } = event;
+
+        if (!data?.user_id || !data?.organization_id) {
+            console.warn('⚠️ Organization membership event missing user or workspace id', data);
+            return { success: false, error: 'missing membership data' };
+        }
+
+        try {
+            await prisma.workspaceMember.create({
+                data: {
+                    userId: data.user_id,
+                    workspaceId: data.organization_id,
+                    role: String(data.role_name).toUpperCase(),
+                }
+            });
+
+            console.log('✅ Workspace member synced to Neon:', data.user_id, data.organization_id);
+            return { success: true, workspaceId: data.organization_id, userId: data.user_id };
+        } catch (error) {
+            console.error('❌ Failed to sync workspace member to Neon:', error);
+            return { success: false, error: error?.message || error };
+        }
+    }
+);
+
+export const functions = [
+    syncUserCreation,
+    syncUserDeletion,
+    syncUserUpdation,
+    sessionRemoved,
+    sessionCreated,
+    syncWorkspaceCreation,
+    syncWorkspaceUpdation,
+    syncWorkspaceDeletion,
+    syncWorkspaceMemberCreation
+];
 
 console.log(`✅ Total ${functions.length} functions registered successfully`);
